@@ -8,6 +8,8 @@
 - We settled down with a timeout of ***1000 seconds per problem*** for every verifier in our experiments.
 - Benchmarks comprised of 400 problems took ***more than 2 days*** to run a single verifier on our machine.
 - Due to the size of pre-built Marabou is too large (~6.4G), we exclude it from this repository but people can easily follow the official [Marabou](https://github.com/NeuralNetworkVerification/Marabou)'s instruction to install. We provide this [script](verifier/marabou_proof/vnncomp_scripts/run_instance.sh) to match with our running scripts. After successfully installing Marabou, copy the [script](verifier/marabou_proof/vnncomp_scripts/run_instance.sh) into `vnncomp_scripts` folder in Marabou's main folder (e.g., Marabou would be installed at `verifier/marabou_proof/`) and it is all set.
+- Due to anonymized reviewing process, we removed all the `logs` generated during experiments, as they might reveal our identities. These logs are required to plot our figures so in order to re-draw all the figures in the paper, please run a complete experiment.
+
 ## Hardware
 
 - All experiments were run on a Linux machine with:

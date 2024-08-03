@@ -53,9 +53,7 @@ python3 main.py --onnx ONNX_PATH --aptp APTP_PATH
 - Additional options:
 
 ```bash
-python3 main.py [-h] --onnx ONNX --aptp APTP 
-                    [--batch BATCH] [--timeout TIMEOUT] 
-                    [--expand_factor EXPAND_FACTOR] [--disable_stabilize]
+python3 main.py [-h] --onnx ONNX --aptp APTP [--batch BATCH] [--timeout TIMEOUT] 
 ```
 
 - `--onnx`: Path to `ONNX` model.

@@ -1,0 +1,9 @@
+torch
+torchvision
+onnx
+gurobipy==10.0
+tqdm
+python-sat
+numpy
+beartype
+onnxruntime
