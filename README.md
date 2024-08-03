@@ -68,8 +68,8 @@ python3 main.py [-h] --onnx ONNX --aptp APTP [--batch BATCH] [--timeout TIMEOUT]
 - A DNN (left) and a proof tree (right) produced verifying the property $(x_1, x_2) \in [-2.0, 2.0] \times [-1.0, 1,0] \Rightarrow (y_1 > y_2)$
 
 <div style="display: flex; justify-content: space-between;">
-    <img src="docs/proof_net.png" alt="Image 1" style="width: 55%;"/>
-    <img src="docs/proof_tree.png" alt="Image 2" style="width: 45%;"/>
+    <img src="docs/proof_net.png" alt="Image 1" style="width: 45%;"/>
+    <img src="docs/proof_tree.png" alt="Image 2" style="width: 35%;"/>
 </div>
 
 - Example of APTP format for the proof tree:
