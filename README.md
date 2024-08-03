@@ -42,6 +42,8 @@ source aptpvenv/bin/activate
 pip3 install -r requirements.txt
 ```
 
+- `APTPchecker` relies heavily on `Gurobi` whose academic license is freely available at [Request License](https://portal.gurobi.com/iam/licenses/request). 
+
 ## Getting Started
 
 - Minimal command:
