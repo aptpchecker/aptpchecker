@@ -110,6 +110,6 @@ python3 main.py [-h] --onnx ONNX --aptp APTP [--batch BATCH] [--timeout TIMEOUT]
 - Check the APTP proof:
 
 ```bash
-X=0 S=1 python3 main.py --onnx example/sample.onnx --aptp example/sample.aptp
+python3 main.py --onnx example/sample.onnx --aptp example/sample.aptp
 ```
 
