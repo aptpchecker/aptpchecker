@@ -3,7 +3,7 @@
 ## Important Notes
 
 - `APTPchecker` relies heavily on `Gurobi` whose academic license is freely available at [Request License](https://portal.gurobi.com/iam/licenses/request). 
-- Thoughout our experiments, we used `Gurobi` version 10 and installation scripts below all list Gurobi version 10. Please request correct version of Gurobi's license to run everything smoothly.
+- Throughout our experiments, we used `Gurobi` version 10 and installation scripts below all use Gurobi version 10. Please request correct version of Gurobi's license to run everything smoothly.
 - Verifying problems and checking their proofs might take ***long time*** to finish. 
 - We settled down with a timeout of ***1000 seconds per problem*** for every verifier in our experiments.
 - Benchmarks comprised of 400 problems took ***more than 2 days*** to run a single verifier on our machine.
