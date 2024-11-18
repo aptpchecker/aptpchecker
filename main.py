@@ -46,8 +46,8 @@ if __name__ == '__main__':
     status = proof_checker.prove(
         proof=proof, 
         batch=args.batch, 
-        expand_factor=2.0 if enable_X else 1.0, 
         timeout=args.timeout,
+        expand=enable_X, 
         refine=enable_S,
     )
     runtime = time.time() - START_TIME

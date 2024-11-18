@@ -37,7 +37,7 @@ class Node:
         return f'Node({self.name}, {self.history})'
 
 
-class ProofQueue:
+class ProofTree:
     
     def __init__(self, proofs: list) -> None:
         histories = proofs if len(proofs) else [[]]
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     print(f'{node_1 < node_2 = }')
     print(f'{node_2 < node_1 = }')
     
-    queue = ProofQueue([[-4], [-2, 4], [2, 1, 4], [2, -1, 4]])
+    queue = ProofTree([[-4], [-2, 4], [2, 1, 4], [2, -1, 4]])
     print(queue)
     queue.add(node_1)
     queue.add(node_2)
