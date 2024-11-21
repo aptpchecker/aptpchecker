@@ -1,12 +1,15 @@
+from beartype import beartype
 import gurobipy as grb
 import multiprocessing
 from tqdm import tqdm
+import typing
 import copy
 import time
 import os
 
-from util.data.proof import ProofTree, ProofReturnStatus
+from util.data.proof import Node, ProofTree, ProofReturnStatus
 from milp.milp_solver import build_milp_solver
+from util.data.objective import Objective
 
 MULTIPROCESS_MODEL = None
 
@@ -17,8 +20,8 @@ ALLOWED_GUROBI_STATUS_CODES = [
     grb.GRB.TIME_LIMIT
 ]
 
-
-def _solve_mip(candidate):
+@beartype
+def _solve_mip(candidate: tuple[Node, dict, float]) -> float:
     can_node, name_dict, _ = candidate
     start_solve_time = time.time()
     can_model = MULTIPROCESS_MODEL.copy()
@@ -62,8 +65,8 @@ def _solve_mip(candidate):
         return can_model.ObjBound
     return can_model.objval
     
-
-def mip_worker(candidate, timeout=None):
+@beartype
+def mip_worker(candidate: tuple[Node, dict, float]) -> Node | None:
     node = candidate[0]
     assert node is not None
     obj_val = _solve_mip(candidate)
@@ -74,7 +77,13 @@ def mip_worker(candidate, timeout=None):
 
 class ProofChecker:
     
-    def __init__(self, net, input_shape, objective, verbose=False) -> None:
+    @beartype
+    def __init__(self, 
+                 net: typing.Any, 
+                 input_shape: tuple, 
+                 objective: Objective, 
+                 verbose: bool = False) -> None:
+        
         self.net = net
         self.objective = copy.deepcopy(objective)
         self.input_shape = input_shape
@@ -82,6 +91,7 @@ class ProofChecker:
         self.device = 'cpu'
 
 
+    @beartype
     @property
     def var_mapping(self) -> dict:
         if not hasattr(self, '_var_mapping'):
@@ -93,13 +103,23 @@ class ProofChecker:
                     count += 1
         return self._var_mapping
     
-    def _initialize_mip(self, objective, timeout=15.0, refine=False):
+    @beartype
+    def _initialize_mip(self, 
+                        objective: Objective, 
+                        timeout: float | int = 15.0, 
+                        refine: bool = False) -> grb.Model:
+        
         input_lower = objective.lower_bound.view(*self.input_shape[1:])
         input_upper = objective.upper_bound.view(*self.input_shape[1:])
+        
+        # property: c @ output <= rhs
         c_to_use = objective.cs[None]
+        rhs_to_use = objective.rhs[0]
+        
         assert c_to_use.shape[1] == 1, f'Unsupported shape {c_to_use.shape=}'
 
         tic = time.time()
+        # add MIP constraints
         solver, solver_vars, self.pre_relu_names, self.relu_names = build_milp_solver(
             net=self.net,
             input_lower=input_lower,
@@ -112,20 +132,22 @@ class ProofChecker:
         build_solver_time = time.time() - tic
         print(f'{build_solver_time=}')
         assert len(objective.cs) == len(solver_vars[-1]) == 1
-        self.objective_var_name = solver_vars[-1][0].varName
-        return solver
         
-    def _set_objective(self, model, objective):
-        new_model = model.copy()
-        rhs_to_use = objective.rhs[0]
         # setup objective
-        objective_var = new_model.getVarByName(self.objective_var_name) - rhs_to_use
-        new_model.setObjective(objective_var, grb.GRB.MINIMIZE)
-        new_model.update()
-        return new_model
+        solver.update()
+        objective_var = solver.getVarByName(solver_vars[-1][0].varName) - rhs_to_use
+        solver.setObjective(objective_var, grb.GRB.MINIMIZE)
+        solver.update()
+        return solver
     
     
-    def build_mip(self, objective, timeout, timeout_per_node, refine):
+    @beartype
+    def build_mip(self, 
+                  objective: Objective, 
+                  timeout: float | int, 
+                  timeout_per_node: float | int, 
+                  refine: bool) -> grb.Model:
+        
         # step 1: build core model without specific objective
         print(f'\n############ Build MIP ############\n')
         mip_model = self._initialize_mip(
@@ -139,10 +161,16 @@ class ProofChecker:
         print(f'{mip_model=}')
 
         # step 2: set specific objective
-        return self._set_objective(mip_model, objective)
+        return mip_model
     
     
-    def prove_nodes(self, proof, batch, timeout, expand=False):
+    @beartype
+    def prove_nodes(self, 
+                    proof: list[list], 
+                    batch: int, 
+                    timeout: float | int, 
+                    expand: bool = False) -> str:
+        
         print(f'\n############ Check Proof ############\n')
         # step 1: proof tree
         proof_tree = ProofTree(proofs=proof)
@@ -154,14 +182,22 @@ class ProofChecker:
             if time.time() - self.start_time > timeout:
                 return ProofReturnStatus.TIMEOUT 
             
+            # get nodes to be proved
             processing_nodes = proof_tree.get(batch)
+            
+            # gather necessary information
             candidates = [(node, self.var_mapping, expand_factor) for node in processing_nodes]
             print(f'Proving {len(candidates)=}')
             
+            # run proofs in parallel
             max_worker = min(len(candidates), os.cpu_count() // 2)
-            with multiprocessing.Pool(max_worker) as pool:
-                results = pool.map(mip_worker, candidates, chunksize=1)
+            if max_worker > 1:
+                with multiprocessing.Pool(max_worker) as pool:
+                    results = pool.map(mip_worker, candidates, chunksize=1)
+            else:
+                results = [mip_worker(c) for c in candidates]
 
+            # filter proved nodes 
             processed = len(proof_tree)
             for solved_node in results:
                 if solved_node is not None:
@@ -178,7 +214,15 @@ class ProofChecker:
         return ProofReturnStatus.CERTIFIED # proved
     
     
-    def prove(self, proof, batch=1, timeout=3600.0, timeout_per_node=15.0, refine=False, expand=False):
+    @beartype
+    def prove(self, 
+              proof: list[list], 
+              batch: int = 1, 
+              timeout: float | int = 3600.0, 
+              timeout_per_node: float | int = 15.0,
+              refine: bool = False, 
+              expand: bool = False) -> str:
+        
         print(f"Settings: {refine=} {expand=} {batch=}")
 
         self.start_time = time.time()

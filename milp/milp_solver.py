@@ -1,3 +1,4 @@
+from beartype import beartype
 import gurobipy as grb
 import multiprocessing
 import torch.nn as nn
@@ -10,7 +11,8 @@ import os
 
 MULTIPROCESS_MODEL = None
 
-def has_relu_var(model):
+@beartype
+def has_relu_var(model: grb.Model) -> bool:
     names = [v.VarName for v in model.getVars()]
     if not len(names):
         return False
@@ -18,8 +20,9 @@ def has_relu_var(model):
     return len(relus) > 0
 
 
-def _mip_solver_worker(candidate):
-    """ Multiprocess worker for solving MIP models in build_the_model_mip_refine """
+@beartype
+def _mip_solver_worker(candidate: str) -> tuple[str, float, float, bool]:
+    """ Multiprocess MIP worker for stabilizing"""
 
     def get_grb_solution(grb_model, reference, bound_type, eps=1e-5):
         refined = False
@@ -87,7 +90,10 @@ def _mip_solver_worker(candidate):
     return var_name, vlb, vub, neuron_refined
 
 
-def _build_solver_input(model, input_lower, input_upper):
+@beartype
+def _build_solver_input(model: grb.Model, 
+                        input_lower: torch.Tensor, 
+                        input_upper: torch.Tensor) -> tuple[list, tuple[torch.Tensor, torch.Tensor]]:
     layer_vars = []
     if input_lower.ndim == 4:
         assert input_lower.size(0) == input_upper.size(0) == 1
@@ -103,7 +109,15 @@ def _build_solver_input(model, input_lower, input_upper):
     return layer_vars, (input_lower, input_upper)
 
 
-def _build_solver_linear(model, layer, layer_name, layer_bounds, prev_vars, c, refine):
+@beartype
+def _build_solver_linear(model: grb.Model, 
+                         layer: torch.nn.Module, 
+                         layer_name: int, 
+                         layer_bounds: tuple[torch.Tensor, torch.Tensor], 
+                         prev_vars: list[grb.Var], 
+                         c: torch.Tensor | None, 
+                         refine: bool) -> tuple[list, tuple[torch.Tensor, torch.Tensor]]:
+    
     global MULTIPROCESS_MODEL
     layer_vars = []
     
@@ -164,7 +178,12 @@ def _build_solver_linear(model, layer, layer_name, layer_bounds, prev_vars, c, r
     return layer_vars, (lower, upper)
 
 
-def _build_solver_relu(model, layer, layer_name, prev_vars):
+@beartype
+def _build_solver_relu(model: grb.Model, 
+                       layer: torch.nn.Module, 
+                       layer_name: int, 
+                       prev_vars: list[grb.Var]) -> tuple[list, tuple[torch.Tensor, torch.Tensor]]:
+                       
     # output vars
     layer_vars = []
     
@@ -216,7 +235,12 @@ def _build_solver_relu(model, layer, layer_name, prev_vars):
     return layer_vars, (lower, upper)
 
 
-def _build_solver_flatten(model, layer, layer_name, prev_vars):
+@beartype
+def _build_solver_flatten(model: grb.Model, 
+                          layer: torch.nn.Module, 
+                          layer_name: int, 
+                          prev_vars: list[grb.Var]) -> tuple[list, tuple[torch.Tensor, torch.Tensor]]:
+
     layer_vars = np.array(prev_vars).reshape(-1).tolist()
     lower = torch.tensor([v.lb for v in layer_vars])
     upper = torch.tensor([v.ub for v in layer_vars])
@@ -225,7 +249,14 @@ def _build_solver_flatten(model, layer, layer_name, prev_vars):
 
 
 
-def _build_solver_conv2d(model, layer, layer_name, layer_bounds, prev_vars, refine):
+@beartype
+def _build_solver_conv2d(model: grb.Model, 
+                         layer: torch.nn.Module, 
+                         layer_name: int, 
+                         layer_bounds: tuple[torch.Tensor, torch.Tensor], 
+                         prev_vars: list[grb.Var],
+                         refine: bool) -> tuple[list, tuple[torch.Tensor, torch.Tensor]]:
+
     global MULTIPROCESS_MODEL
     layer_vars = []
     # vars
@@ -299,9 +330,7 @@ def _build_solver_conv2d(model, layer, layer_name, layer_bounds, prev_vars, refi
                 # init linear constraint LHS implied by the conv operation
                 for in_chan_idx in range(weight.shape[1]):
                     coeffs = weight[out_chan_idx, in_chan_idx, ker_row_min:ker_row_max, ker_col_min:ker_col_max].reshape(-1)
-                    # print(f'{in_chan_idx=} {weight.shape=}')
                     gvars = prev_vars_array[in_chan_idx, in_row_idx_min:in_row_idx_max+1, in_col_idx_min:in_col_idx_max+1].reshape(-1)
-                    # print(f'{coeffs=} {gvars=}')
                     lin_expr += grb.LinExpr(coeffs, gvars)
 
                 # add the output var and constraint
@@ -325,7 +354,6 @@ def _build_solver_conv2d(model, layer, layer_name, layer_bounds, prev_vars, refi
     # stabilization for hidden layers
     if has_relu_var(model) and refine:
         candidates = [v_.VarName for v_ in np.array(layer_vars).reshape(-1) if v_.lb * v_.ub < 0]
-        # print(f'{len(candidates) = }')
         if len(candidates):
             MULTIPROCESS_MODEL = model
             max_worker = min(len(candidates), os.cpu_count() // 2)
@@ -349,10 +377,16 @@ def _build_solver_conv2d(model, layer, layer_name, layer_bounds, prev_vars, refi
     return layer_vars, (lower, upper)
 
 # FIXME: only support feed-forward networks
-def build_milp_solver(net, input_lower, input_upper, timeout=15.0, c=None, name='', refine=True, return_bounds=False):
-    # abstract domain
-    # _, hidden_bounds = Approximator(net)(input_lower[None], input_upper[None])
-    
+@beartype
+def build_milp_solver(net: torch.nn.Module, 
+                      input_lower: torch.Tensor, 
+                      input_upper: torch.Tensor, 
+                      timeout: float | int =15.0, 
+                      c: torch.Tensor | None = None, 
+                      name: str = '', 
+                      refine: bool = True, 
+                      return_bounds: bool = False) -> tuple[grb.Model, list, list, list]:
+
     # init solver
     solver = grb.Model(name)
     solver.setParam('OutputFlag', False)
