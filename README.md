@@ -1,4 +1,4 @@
-# APTP : Generating and Checking Neural Network Proofs
+# Generating and Checking DNN Verification Proofs
 
 **See [Experiment](Experiment/README.md) for more details on experimental results**
 
