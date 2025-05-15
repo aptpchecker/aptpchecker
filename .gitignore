@@ -1,6 +1,9 @@
 aptpvenv/
+venv_aptp/
+
 backup/
 scripts/
+ref/
 Experiment/verifier/marabou_old/
 
 *.log

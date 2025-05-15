@@ -1,9 +1,10 @@
 torch
 torchvision
 onnx
-gurobipy==10.0
+gurobipy==11.0
 tqdm
 python-sat
 numpy
 beartype
 onnxruntime
+pyscipopt

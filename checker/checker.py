@@ -1,11 +1,9 @@
 from beartype import beartype
 import gurobipy as grb
-import multiprocessing
 from tqdm import tqdm
 import typing
 import copy
 import time
-import os
 
 from util.data.proof import Node, ProofTree, ProofReturnStatus
 from milp.milp_solver import build_milp_solver
@@ -35,9 +33,6 @@ def _solve_mip(candidate: tuple[Node, dict, float]) -> float:
         relu_name, pre_relu_name, neuron_idx = name_dict[abs(literal)]
         pre_var = can_model.getVarByName(f"lay{pre_relu_name}_{neuron_idx}")
         relu_var = can_model.getVarByName(f"ReLU{relu_name}_{neuron_idx}")
-        # print(f'\t- {pre_relu_name=}, {neuron_idx=}, {relu_name=}')
-        # print(f'\t- {literal=} {pre_var=}, {relu_var=} {pre_var.lb=} {pre_var.ub=}')
-        # print()
         assert pre_var is not None
         if relu_var is None: # var is None if relu is stabilized
             assert pre_var.lb * pre_var.ub >= 0, print('[!] Missing constraints')
@@ -50,7 +45,6 @@ def _solve_mip(candidate: tuple[Node, dict, float]) -> float:
             else: # inactive
                 relu_var.lb = 0
                 relu_var.ub = 0
-        # TODO: remove all other relu_var relevant constraints
     can_model.update()
     can_model.optimize()
 
@@ -168,37 +162,27 @@ class ProofChecker:
     def prove_nodes(self, 
                     proof: list[list], 
                     batch: int, 
-                    timeout: float | int, 
-                    expand: bool = False) -> str:
+                    timeout: float | int) -> str:
         
         print(f'\n############ Check Proof ############\n')
+        start_time = time.time()
+        
         # step 1: proof tree
         proof_tree = ProofTree(proofs=proof)
-        expand_factor = 2.0 if expand else 1.0
         
         # step 2: prove nodes
-        progress_bar = tqdm(total=len(proof_tree), desc=f"Processing proof")
         while len(proof_tree):
-            if time.time() - self.start_time > timeout:
+            if time.time() - start_time > timeout:
                 return ProofReturnStatus.TIMEOUT 
             
             # get nodes to be proved
             processing_nodes = proof_tree.get(batch)
             
             # gather necessary information
-            candidates = [(node, self.var_mapping, expand_factor) for node in processing_nodes]
-            print(f'Proving {len(candidates)=}')
+            candidates = [(node, self.var_mapping, 1.0) for node in processing_nodes]
             
-            # run proofs in parallel
-            max_worker = min(len(candidates), os.cpu_count() // 2)
-            if max_worker > 1:
-                with multiprocessing.Pool(max_worker) as pool:
-                    results = pool.map(mip_worker, candidates, chunksize=1)
-            else:
-                results = [mip_worker(c) for c in candidates]
-
-            # filter proved nodes 
-            processed = len(proof_tree)
+            # run proofs
+            results = [mip_worker(c) for c in candidates]
             for solved_node in results:
                 if solved_node is not None:
                     # remove proved leaf
@@ -206,11 +190,6 @@ class ProofChecker:
                 else:
                     # cannot prove a leaf
                     return ProofReturnStatus.UNCERTIFIED # unproved
-                
-            # print(f'\t- Remaining: {len(proof_tree)}')
-            processed -= len(proof_tree)
-            progress_bar.update(processed)
-        
         return ProofReturnStatus.CERTIFIED # proved
     
     
@@ -225,7 +204,6 @@ class ProofChecker:
         
         print(f"Settings: {refine=} {expand=} {batch=}")
 
-        self.start_time = time.time()
         global MULTIPROCESS_MODEL
         
         # step 1: build mip
@@ -236,10 +214,6 @@ class ProofChecker:
             refine=refine,
         )
 
-        # check timeout
-        if time.time() - self.start_time > timeout:
-            return ProofReturnStatus.TIMEOUT 
-        
         MULTIPROCESS_MODEL = mip_model
         
         # step 2: prove nodes
@@ -247,7 +221,6 @@ class ProofChecker:
             proof=proof,
             batch=batch, 
             timeout=timeout,
-            expand=expand,
         )
         
         MULTIPROCESS_MODEL = None
