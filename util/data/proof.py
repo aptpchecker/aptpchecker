@@ -44,7 +44,7 @@ class ProofQueue:
         self.queue = [Node(history=h, name=f'node_{i}') for i, h in enumerate(histories)]
         
     def get(self, batch):
-        indices = random.sample(range(len(self)), min(len(self), batch))
+        indices = range(min(len(self), batch))
         # print(f'{batch=} {len(self)=} {indices=}')
         return [self.queue[idx] for idx in indices]
     
